@@ -1,4 +1,4 @@
-import { Telegraf } from "telegraf";
+import { Telegraf, Markup } from "telegraf";
 import axios from "axios";
 
 const token = process.env.BOT_TOKEN;
@@ -80,7 +80,12 @@ bot.command("calc", async (ctx) => {
       statusMsg.message_id,
       undefined,
       cardMessage,
-      { parse_mode: "HTML" },
+      {
+        parse_mode: "HTML",
+        ...Markup.inlineKeyboard([
+          [Markup.button.url("🚀 Get Started", "https://www.autohodl.money/")],
+        ]),
+      },
     );
   } catch (error) {
     console.error("API Error:", error);
