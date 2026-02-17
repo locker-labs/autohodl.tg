@@ -1,23 +1,27 @@
 import { Telegraf } from "telegraf";
+import axios from "axios";
 
 const token = process.env.BOT_TOKEN;
+const BASE_API_URL = process.env.AUTOHODL_URL;
 
-if (!token) {
+if (!token || !BASE_API_URL) {
   throw new Error("BOT_TOKEN is missing in environment variables!");
 }
+// Linea
+const USDC_ADDRESS = "0x176211869cA2b568f2A7D4EE941E073a821EE1ff";
 
 const bot = new Telegraf(token);
 
-const getMockSavings = (address: string) => {
-  return {
-    wallet: `${address.slice(0, 6)}...${address.slice(-4)}`,
-    oneDollar: (Math.random() * 50 + 10).toFixed(2), // Mock $1 tier
-    tenDollar: (Math.random() * 200 + 50).toFixed(2), // Mock $10 tier
-    hundredDollar: (Math.random() * 1000 + 200).toFixed(2), // Mock $100 tier
-  };
-};
-const escape = (text: string) => {
-  return text.replace(/[_*[\]()~`>#+-=|{}.!]/g, "\\$&");
+const CLEAN_BASE_URL = BASE_API_URL.endsWith("/")
+  ? BASE_API_URL.slice(0, -1)
+  : BASE_API_URL;
+const CALCULATOR_ENDPOINT = `${CLEAN_BASE_URL}/api/v1/savings-calculator`;
+
+const formatCurrency = (value: number) => {
+  return (value / 1_000_000).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 };
 
 bot.command("calc", async (ctx) => {
@@ -35,26 +39,58 @@ bot.command("calc", async (ctx) => {
     });
   }
 
-  try {
-    const data = getMockSavings(walletAddress);
+  const statusMsg = await ctx.reply(
+    `⏳ Calculating USDC savings for <code>${walletAddress.slice(0, 6)}...</code>`,
+    { parse_mode: "HTML" },
+  );
 
-    // Using HTML tags for a clean card look
-    const message = [
-      `📊 <b>30D Savings Estimate</b>`,
-      `<b>Wallet:</b> <code>${data.wallet}</code>`,
+  try {
+    // Perform POST request with the required body
+    const response = await axios.post(CALCULATOR_ENDPOINT, {
+      userAddress: walletAddress,
+      tokens: [USDC_ADDRESS],
+    });
+
+    // Navigate the response: savings -> USDC_ADDRESS -> [1, 10, 100]
+    const savingsArray = response.data.savings[USDC_ADDRESS];
+
+    if (!savingsArray || savingsArray.length < 3) {
+      throw new Error("Invalid API response structure");
+    }
+
+    const one = formatCurrency(savingsArray[0]);
+    const ten = formatCurrency(savingsArray[1]);
+    const hundred = formatCurrency(savingsArray[2]);
+    const shortAddress = `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
+
+    const cardMessage = [
+      `📊 <b>30D Savings Estimate: Linea</b>`,
+      `<b>Wallet:</b> <code>${shortAddress}</code>`,
       `\n<code>--------------------------</code>`,
       `💰 <b>Roundup Tiers (30 Days)</b>`,
-      `\n<code>$1   Tier:</code>  <b>$${data.oneDollar}</b>`,
-      `<code>$10  Tier:</code>  <b>$${data.tenDollar}</b>`,
-      `<code>$100 Tier:</code>  <b>$${data.hundredDollar}</b>`,
+      `\n<code>$1   Tier:</code>  <b>$${one}</b>`,
+      `<code>$10  Tier:</code>  <b>$${ten}</b>`,
+      `<code>$100 Tier:</code>  <b>$${hundred}</b>`,
       `<code>--------------------------</code>`,
-      `\n<i>Estimated using on-chain activity.</i>`,
+      `\n<i>Yield-optimized via AAVE & SYT</i>`,
     ].join("\n");
 
-    await ctx.reply(message, { parse_mode: "HTML" });
+    await ctx.telegram.editMessageText(
+      ctx.chat.id,
+      statusMsg.message_id,
+      undefined,
+      cardMessage,
+      { parse_mode: "HTML" },
+    );
   } catch (error) {
-    console.error("Bot Error:", error);
-    await ctx.reply("❌ An error occurred while generating the report.");
+    console.error("API Error:", error);
+    await ctx.telegram.editMessageText(
+      ctx.chat.id,
+      statusMsg.message_id,
+      undefined,
+      "❌ <b>Error:</b> Could not calculate savings. Ensure the wallet has transaction history.",
+      { parse_mode: "HTML" },
+    );
   }
 });
 
