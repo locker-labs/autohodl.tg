@@ -1,5 +1,8 @@
 import { Telegraf, Markup } from "telegraf";
 import axios from "axios";
+import { getChatPersonalization } from "./utils/personalisation";
+import cron from "node-cron";
+import { dailyCroakWinnerMessage } from "./utils/dailyMessages";
 
 const token = process.env.BOT_TOKEN;
 const BASE_API_URL = process.env.AUTOHODL_URL;
@@ -24,8 +27,37 @@ const formatCurrency = (value: number) => {
   });
 };
 
+// --- Scheduling ---
+
+// Runs every day at 09:00 AM
+cron.schedule("58 20 * * *", async () => {
+  console.log("⏰ Triggering scheduled daily leaderboard...");
+  const TARGET_CHAT_ID = -4788466319;
+  const message = await dailyCroakWinnerMessage();
+  if (!message) {
+    console.log("Error while constructing daily croak winner message");
+    return;
+  }
+  await bot.telegram.sendMessage(TARGET_CHAT_ID, message, {
+    parse_mode: "HTML",
+    ...Markup.inlineKeyboard([
+      [
+        Markup.button.url(
+          "Check Your Rank",
+          "https://www.autohodl.money/leaderboard",
+        ),
+      ],
+    ]),
+  });
+});
+
+// --- Commands ---
+
 bot.command("calc", async (ctx) => {
-  const walletAddress = ctx.payload.trim();
+    const walletAddress = ctx.payload.trim();
+    const { id: chatId, type: chatType } = ctx.chat;
+    const chatTitle = "title" in ctx.chat ? ctx.chat.title : "Private";
+    const ui = getChatPersonalization(chatType, chatTitle, chatId);
 
   if (!walletAddress) {
     return ctx.reply("⚠️ Usage: <b>/calc &lt;wallet_address&gt;</b>", {
@@ -58,13 +90,14 @@ bot.command("calc", async (ctx) => {
       throw new Error("Invalid API response structure");
     }
 
+    // ToDo: Convert into croaks
     const one = formatCurrency(savingsArray[0]);
     const ten = formatCurrency(savingsArray[1]);
     const hundred = formatCurrency(savingsArray[2]);
     const shortAddress = `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
 
     const cardMessage = [
-      `📊 <b>30D Savings Estimate: Linea</b>`,
+      ui.header,
       `<b>Wallet:</b> <code>${shortAddress}</code>`,
       `\n<code>--------------------------</code>`,
       `💰 <b>Roundup Tiers (30 Days)</b>`,
@@ -72,7 +105,7 @@ bot.command("calc", async (ctx) => {
       `<code>$10  Tier:</code>  <b>$${ten}</b>`,
       `<code>$100 Tier:</code>  <b>$${hundred}</b>`,
       `<code>--------------------------</code>`,
-      `\n<i>Yield-optimized via AAVE & SYT</i>`,
+      `\n${ui.footer}`,
     ].join("\n");
 
     await ctx.telegram.editMessageText(
@@ -83,7 +116,7 @@ bot.command("calc", async (ctx) => {
       {
         parse_mode: "HTML",
         ...Markup.inlineKeyboard([
-          [Markup.button.url("🚀 Get Started", "https://www.autohodl.money/")],
+          [Markup.button.url(ui.buttonText, "https://www.autohodl.money/")],
         ]),
       },
     );

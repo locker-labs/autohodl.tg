@@ -4,13 +4,19 @@
   "type": "module",
   "private": true,
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/jest": "^30.0.0",
+    "@types/node-cron": "^3.0.11",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.6"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
     "axios": "^1.13.5",
-    "telegraf": "^4.16.3"
+    "node-cron": "^4.2.1",
+    "telegraf": "^4.16.3",
+    "viem": "^2.46.2"
   }
 }
