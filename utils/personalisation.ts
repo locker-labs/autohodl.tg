@@ -14,6 +14,17 @@ const formatUSDC = (value: number) => {
   });
 };
 
+/**
+ * Formats a number with commas and 2 decimal places.
+ * Example: 4000 -> "4,000.00"
+ */
+export const formatAmount = (value: number): string => {
+  return value.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
+
 export const getPastSavingsMessage = (
   chatType: string,
   chatTitle: string,
@@ -26,7 +37,7 @@ export const getPastSavingsMessage = (
     `<b>Wallet:</b> <code>${shortAddress}</code>\n`,
     `${divider}`,
     `💰 <b>Roundup Tiers (30 Days)</b>`,
-    `\n<code>$1   Tier:</code>  <b>$${savingsAmount}</b>`,
+    `\n<code>$1   Tier:</code>  <b>$${formatAmount(savingsAmount)}</b>`,
     `${divider}`,
   ].join("\n");
   // 1. Logic for Private Chats (Direct Messages)
@@ -52,13 +63,13 @@ export const getPastSavingsMessage = (
       chatTitle.toLowerCase().includes("croaker") ||
       true
     ) {
-      const formattedUSDC = formatUSDC(savingsAmount);
+      const formattedUSDC = formatAmount(Number(formatUSDC(savingsAmount)));
       let header = `🐸 <b>$CROAK Savings Potential</b>\n`;
       header += `${divider}\n`;
       let croakBody = `User: ${shortAddress}\n`;
       croakBody += `In the last 30 days you could have saved:\n\n`;
-      croakBody += `🤑 Upto ${getReward(parseFloat(formattedUSDC), true)} $CROAK in bonuses \n`;
-      croakBody += `💵 ${formattedUSDC} USDC accrued savings \n`;
+      croakBody += `🤑 Upto ${formatAmount(getReward(parseFloat(formattedUSDC), true))} $CROAK in bonuses \n`;
+      croakBody += `💵 ${formatAmount(Number(formattedUSDC))} USDC accrued savings \n`;
       croakBody += `📈 Earning yield on Aave\n`;
       let footer = `${divider}\n\n`;
       footer += `💎 Start saving: https://autohodl.money \n\n`;
@@ -92,15 +103,15 @@ export const getSavingsMessage = async (
   header += `${divider}\n`;
   const shortAddress = `${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
   let body = `Address: ${shortAddress} \n`;
-  body += `🏦 Rounded up $${amount} into savings \n`;
+  body += `🏦 Rounded up $${formatAmount(amount)} into savings \n`;
   body += "📈 Earning yield on Aave \n";
 
   if (eligible.length == 0) {
-    body += "🐸 Hold at least 1000 $CROAK \n to earn a bonus next time \n\n";
+    body += "🐸 Hold at least 1,000 $CROAK \n to earn a bonus next time \n\n";
   } else {
     const reward = await getLiveReward(userAddress, amount);
     if (reward > 0) {
-      body += `🐸 Earned $${reward} $CROAK bonus\n`;
+      body += `🐸 Earned $${formatAmount(reward)} $CROAK bonus\n`;
     } else {
       body += `🐸 Daily limit reached for $CROAK bonus \n`;
     }

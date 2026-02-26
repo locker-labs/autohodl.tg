@@ -7,6 +7,7 @@ import {
 import cron from "node-cron";
 import { dailyCroakWinnerMessage } from "./utils/dailyMessages";
 import type { SavingTrigger } from "./utils/types";
+import { formatUnits } from "viem";
 
 const token = process.env.BOT_TOKEN;
 const BASE_API_URL = process.env.AUTOHODL_URL;
@@ -141,7 +142,8 @@ Bun.serve({
         // ToDo: Add authorisation
         const body = await req.json();
         const { userAddress, amount, chainId } = body as SavingTrigger;
-        const ui = await getSavingsMessage(userAddress, amount);
+        const parsedAmount = Number(formatUnits(BigInt(amount), 6));
+        const ui = await getSavingsMessage(userAddress, parsedAmount);
         const savingMessage = [ui.header, ui.body, ui.footer].join("\n");
 
         await bot.telegram.sendMessage(TARGET_CHAT_ID, savingMessage, {

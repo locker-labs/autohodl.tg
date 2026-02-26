@@ -1,5 +1,5 @@
 import { runDailyLeaderboard } from "./tokens/croak";
-import { divider } from "./personalisation";
+import { divider, formatAmount } from "./personalisation";
 /**
  * Formats the daily announcement message
  */
@@ -22,8 +22,8 @@ const dailyCroakWinnerMessage = async () => {
     let message = `🐸 <b>$CROAK Savings: ${formattedDate}</b> 🐸\n`;
     message += `${divider}\n\n`;
 
-    message += `🤑 ${totalReward} $CROAK distributed in\nbonuses \n`;
-    message += `💵 ${totalSaved} USDC now earning yield \n`;
+    message += `🤑 ${formatAmount(totalReward)} $CROAK distributed in\nbonuses \n`;
+    message += `💵 ${formatAmount(totalSaved)} USDC now earning yield \n`;
     message += `📈 Earning yield on Aave \n\n`;
     message += `${divider}\n\n`;
     message += `💎 Check your savings potential:\n`;
