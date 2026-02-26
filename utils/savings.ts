@@ -53,6 +53,7 @@ const getDailyTopSavers = async () => {
     return Array.from(totals.entries())
       .map(([address, amount]) => ({
         address,
+        rawAmount: amount,
         formattedAmount: parseFloat(formatUnits(amount, 6)),
       }))
       .sort((a, b) => b.formattedAmount - a.formattedAmount);

@@ -1,12 +1,17 @@
 import { Telegraf, Markup } from "telegraf";
 import axios from "axios";
-import { getChatPersonalization } from "./utils/personalisation";
+import {
+  getPastSavingsMessage,
+  getSavingsMessage,
+} from "./utils/personalisation";
 import cron from "node-cron";
 import { dailyCroakWinnerMessage } from "./utils/dailyMessages";
+import type { SavingTrigger } from "./utils/types";
 
 const token = process.env.BOT_TOKEN;
 const BASE_API_URL = process.env.AUTOHODL_URL;
 
+  const TARGET_CHAT_ID = -4788466319;
 if (!token || !BASE_API_URL) {
   throw new Error("BOT_TOKEN is missing in environment variables!");
 }
@@ -20,19 +25,12 @@ const CLEAN_BASE_URL = BASE_API_URL.endsWith("/")
   : BASE_API_URL;
 const CALCULATOR_ENDPOINT = `${CLEAN_BASE_URL}/api/v1/savings-calculator`;
 
-const formatCurrency = (value: number) => {
-  return (value / 1_000_000).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-};
 
 // --- Scheduling ---
 
 // Runs every day at 09:00 AM
-cron.schedule("58 20 * * *", async () => {
+cron.schedule("51 21 * * *", async () => {
   console.log("⏰ Triggering scheduled daily leaderboard...");
-  const TARGET_CHAT_ID = -4788466319;
   const message = await dailyCroakWinnerMessage();
   if (!message) {
     console.log("Error while constructing daily croak winner message");
@@ -41,23 +39,18 @@ cron.schedule("58 20 * * *", async () => {
   await bot.telegram.sendMessage(TARGET_CHAT_ID, message, {
     parse_mode: "HTML",
     ...Markup.inlineKeyboard([
-      [
-        Markup.button.url(
-          "Check Your Rank",
-          "https://www.autohodl.money/leaderboard",
-        ),
-      ],
+      [Markup.button.url("🚀 Join Now!", "https://www.autohodl.money/")],
     ]),
   });
 });
 
 // --- Commands ---
 
-bot.command("calc", async (ctx) => {
-    const walletAddress = ctx.payload.trim();
-    const { id: chatId, type: chatType } = ctx.chat;
-    const chatTitle = "title" in ctx.chat ? ctx.chat.title : "Private";
-    const ui = getChatPersonalization(chatType, chatTitle, chatId);
+bot.command("autohodl", async (ctx) => {
+  console.log(ctx.chat);
+  const walletAddress = ctx.payload.trim();
+  const { id: chatId, type: chatType } = ctx.chat;
+  const chatTitle = "title" in ctx.chat ? ctx.chat.title : "Private";
 
   if (!walletAddress) {
     return ctx.reply("⚠️ Usage: <b>/calc &lt;wallet_address&gt;</b>", {
@@ -89,24 +82,15 @@ bot.command("calc", async (ctx) => {
     if (!savingsArray || savingsArray.length < 3) {
       throw new Error("Invalid API response structure");
     }
+    const ui = getPastSavingsMessage(
+      chatType,
+      chatTitle,
+      chatId,
+      savingsArray[0],
+      walletAddress,
+    );
 
-    // ToDo: Convert into croaks
-    const one = formatCurrency(savingsArray[0]);
-    const ten = formatCurrency(savingsArray[1]);
-    const hundred = formatCurrency(savingsArray[2]);
-    const shortAddress = `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
-
-    const cardMessage = [
-      ui.header,
-      `<b>Wallet:</b> <code>${shortAddress}</code>`,
-      `\n<code>--------------------------</code>`,
-      `💰 <b>Roundup Tiers (30 Days)</b>`,
-      `\n<code>$1   Tier:</code>  <b>$${one}</b>`,
-      `<code>$10  Tier:</code>  <b>$${ten}</b>`,
-      `<code>$100 Tier:</code>  <b>$${hundred}</b>`,
-      `<code>--------------------------</code>`,
-      `\n${ui.footer}`,
-    ].join("\n");
+    const cardMessage = [ui.header, ui.body, ui.footer].join("\n");
 
     await ctx.telegram.editMessageText(
       ctx.chat.id,
@@ -130,6 +114,52 @@ bot.command("calc", async (ctx) => {
       { parse_mode: "HTML" },
     );
   }
+});
+
+bot.command("daily", async (ctx) => {
+  const TARGET_CHAT_ID = ctx.chat.id;
+  const message = await dailyCroakWinnerMessage();
+  if (!message) {
+    console.log("Error while constructing daily croak winner message");
+    return;
+  }
+  await bot.telegram.sendMessage(TARGET_CHAT_ID, message, {
+    parse_mode: "HTML",
+    ...Markup.inlineKeyboard([
+      [Markup.button.url("🚀 Join Now!", "https://www.autohodl.money/")],
+    ]),
+  });
+});
+
+// Ports
+Bun.serve({
+  port: process.env.TRIGGER_PORT || 3000,
+  async fetch(req) {
+    const url = new URL(req.url);
+    if (req.method === "POST" && url.pathname === "/notify") {
+      try {
+        // ToDo: Add authorisation
+        const body = await req.json();
+        const { userAddress, amount, chainId } = body as SavingTrigger;
+        const ui = await getSavingsMessage(userAddress, amount);
+        const savingMessage = [ui.header, ui.body, ui.footer].join("\n");
+
+        await bot.telegram.sendMessage(TARGET_CHAT_ID, savingMessage, {
+          parse_mode: "HTML",
+          ...Markup.inlineKeyboard([
+            [Markup.button.url(ui.buttonText, "https://www.autohodl.money/")],
+          ]),
+        });
+
+        return Response.json({ status: "success", delivered: true });
+      } catch (err) {
+        console.error("Trigger Error:", err);
+        return new Response("Invalid Request", { status: 400 });
+      }
+    }
+
+    return new Response("Not Found", { status: 404 });
+  },
 });
 
 console.log("🚀 Bot is running with Bun (Mock Data Mode)");
