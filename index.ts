@@ -3,16 +3,17 @@ import axios from "axios";
 import {
   getPastSavingsMessage,
   getSavingsMessage,
-} from "./utils/personalisation";
+} from "./utils/personalisation.js";
 import cron from "node-cron";
-import { dailyCroakWinnerMessage } from "./utils/dailyMessages";
-import type { SavingTrigger } from "./utils/types";
+import { dailyCroakWinnerMessage } from "./utils/dailyMessages.js";
+import type { SavingTrigger } from "./utils/types.js";
 import { formatUnits } from "viem";
+import express from "express"; // <-- Added Express
 
 const token = process.env.BOT_TOKEN;
 const BASE_API_URL = process.env.AUTOHODL_URL;
 
-  const TARGET_CHAT_ID = -4788466319;
+const TARGET_CHAT_ID = -4788466319;
 if (!token || !BASE_API_URL) {
   throw new Error("BOT_TOKEN is missing in environment variables!");
 }
@@ -25,7 +26,6 @@ const CLEAN_BASE_URL = BASE_API_URL.endsWith("/")
   ? BASE_API_URL.slice(0, -1)
   : BASE_API_URL;
 const CALCULATOR_ENDPOINT = `${CLEAN_BASE_URL}/api/v1/savings-calculator`;
-
 
 // --- Scheduling ---
 
@@ -71,13 +71,11 @@ bot.command("autohodl", async (ctx) => {
   );
 
   try {
-    // Perform POST request with the required body
     const response = await axios.post(CALCULATOR_ENDPOINT, {
       userAddress: walletAddress,
       tokens: [USDC_ADDRESS],
     });
 
-    // Navigate the response: savings -> USDC_ADDRESS -> [1, 10, 100]
     const savingsArray = response.data.savings[USDC_ADDRESS];
 
     if (!savingsArray || savingsArray.length < 3) {
@@ -132,39 +130,41 @@ bot.command("daily", async (ctx) => {
   });
 });
 
-// Ports
-Bun.serve({
-  port: process.env.TRIGGER_PORT || 3000,
-  async fetch(req) {
-    const url = new URL(req.url);
-    if (req.method === "POST" && url.pathname === "/notify") {
-      try {
-        // ToDo: Add authorisation
-        const body = await req.json();
-        const { userAddress, amount, chainId } = body as SavingTrigger;
-        const parsedAmount = Number(formatUnits(BigInt(amount), 6));
-        const ui = await getSavingsMessage(userAddress, parsedAmount);
-        const savingMessage = [ui.header, ui.body, ui.footer].join("\n");
+// --- Express Server (Replacing Bun.serve) ---
+const app = express();
+app.use(express.json()); // This replaces the need for await req.json()
 
-        await bot.telegram.sendMessage(TARGET_CHAT_ID, savingMessage, {
-          parse_mode: "HTML",
-          ...Markup.inlineKeyboard([
-            [Markup.button.url(ui.buttonText, "https://www.autohodl.money/")],
-          ]),
-        });
+const port = process.env.TRIGGER_PORT || 3001;
 
-        return Response.json({ status: "success", delivered: true });
-      } catch (err) {
-        console.error("Trigger Error:", err);
-        return new Response("Invalid Request", { status: 400 });
-      }
-    }
+app.post("/notify", async (req, res) => {
+  try {
+    // ToDo: Add authorisation
+    const { userAddress, amount, chainId } = req.body as SavingTrigger;
 
-    return new Response("Not Found", { status: 404 });
-  },
+    const parsedAmount = Number(formatUnits(BigInt(amount), 6));
+    const ui = await getSavingsMessage(userAddress, parsedAmount);
+    const savingMessage = [ui.header, ui.body, ui.footer].join("\n");
+
+    await bot.telegram.sendMessage(TARGET_CHAT_ID, savingMessage, {
+      parse_mode: "HTML",
+      ...Markup.inlineKeyboard([
+        [Markup.button.url(ui.buttonText, "https://www.autohodl.money/")],
+      ]),
+    });
+
+    // Node/Express way to send JSON response
+    res.json({ status: "success", delivered: true });
+  } catch (err) {
+    console.error("Trigger Error:", err);
+    res.status(400).send("Invalid Request");
+  }
 });
 
-console.log("🚀 Bot is running with Bun (Mock Data Mode)");
+app.listen(port, () => {
+  console.log(`🚀 Webhook Server listening on port ${port}`);
+});
+
+console.log("🚀 Telegram Bot is running with Node.js");
 bot.launch();
 
 process.on("SIGINT", () => bot.stop("SIGINT"));
