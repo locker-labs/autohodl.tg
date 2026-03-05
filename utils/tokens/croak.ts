@@ -1,14 +1,14 @@
 import { parseAbi, formatUnits } from "viem";
-import { client, getDailyTopSavers } from "../savings";
+import { client, getDailyTopSavers } from "../savings.js";
 import { join } from "path";
-import type { DailyWinner, RewardDb } from "../types";
-import { unlink } from "node:fs/promises";
+import type { DailyWinner, RewardDb } from "../types.js";
+import fs from "fs/promises"; // <-- Using Node's fs/promises
 
 const REWARDS_PATH = join(process.cwd(), "rewards.json");
 
 const MINIMUM_CROAK_LIMIT = 1000n; // requirement
 const CROAK_ADDRESS =
-  "0x176211869ca2b568f2a7d4ee941e073a821ee1ff" as `0x${string}`;
+  "0xaCb54d07cA167934F57F829BeE2cC665e1A5ebEF" as `0x${string}`;
 
 const erc20Abi = parseAbi([
   "function balanceOf(address owner) view returns (uint256)",
@@ -30,22 +30,31 @@ export async function getLiveReward(
   userAddress: string,
   usdcSavedFormatted: number,
 ) {
-  const file = Bun.file(REWARDS_PATH);
   let db: RewardDb = {};
 
-  // Load existing data
-  if (await file.exists()) {
-    db = await file.json();
+  // Node.js way to handle file reading/existence
+  try {
+    const data = await fs.readFile(REWARDS_PATH, "utf-8");
+    db = JSON.parse(data);
+  } catch (error: any) {
+    // If the file doesn't exist (ENOENT), we just proceed with the empty db object
+    if (error.code !== "ENOENT") {
+      console.error("Error reading rewards file:", error);
+    }
   }
-  const { rewardAmount } = db[userAddress] || {
-    rewardAmount: 0,
-  };
+
+  const { rewardAmount = 0 } = db[userAddress] || {};
   const availableReward = MAX_REWARD - rewardAmount;
+
   // Calculate proportional reward
   const calculatedReward = usdcSavedFormatted * REWARD_RATE;
   const liveReward = Math.min(availableReward, calculatedReward);
+
   db[userAddress] = { rewardAmount: liveReward + rewardAmount };
-  await Bun.write(REWARDS_PATH, JSON.stringify(db, null, 2));
+
+  // Node.js file write
+  await fs.writeFile(REWARDS_PATH, JSON.stringify(db, null, 2), "utf-8");
+
   return liveReward;
 }
 
@@ -69,7 +78,7 @@ export const getEligibleAddresses = async (userAddresses: `0x${string}`[]) => {
       const callResult = balanceResults[index];
       if (callResult && callResult.status === "success") {
         const balance = callResult.result as bigint;
-        // Ensure you compare with the correct decimals if needed (e.g., MINIMUM_CROAK_LIMIT * 10n**18n)
+        // Ensure you compare with the correct decimals if needed
         return balance >= MINIMUM_CROAK_LIMIT;
       }
       return false;
@@ -89,7 +98,7 @@ export const getEligibleAddresses = async (userAddresses: `0x${string}`[]) => {
  */
 export const runDailyLeaderboard = async (): Promise<DailyWinner[]> => {
   try {
-    // 1. Get raw data (now contains address, savedAmount, and formattedAmount)
+    // 1. Get raw data
     const rawSavingsData = await getDailyTopSavers();
 
     if (rawSavingsData.length === 0) {
@@ -97,27 +106,28 @@ export const runDailyLeaderboard = async (): Promise<DailyWinner[]> => {
       return [];
     }
 
-    // 2. Extract addresses for the balance check
+    // 2. Extract addresses for the balance check (Added explicit 'any' type to clear TS error)
     const participantAddresses = rawSavingsData.map(
-      (s) => s.address as `0x${string}`,
+      (s: any) => s.address as `0x${string}`,
     );
 
     // 3. Filter for $CROAK holders
     const eligibleAddresses = await getEligibleAddresses(participantAddresses);
     const eligibleSet = new Set(eligibleAddresses);
 
-    // 4. Filter the raw data using our eligible set
+    // 4. Filter the raw data using our eligible set (Added explicit types to clear TS error)
     const results = rawSavingsData
-      .filter((item) => eligibleSet.has(item.address as `0x${string}`))
-      .map((item) => ({
+      .filter((item: any) => eligibleSet.has(item.address as `0x${string}`))
+      .map((item: any) => ({
         address: item.address,
         savedAmount: item.rawAmount, // The raw BigInt
         formattedAmount: item.formattedAmount, // The human-readable float
         rewardAmount: getReward(item.formattedAmount), // Your constant reward
       }))
       // Sort by the BigInt to ensure accuracy
-      .sort((a, b) => (b.savedAmount > a.savedAmount ? 1 : -1))
+      .sort((a: any, b: any) => (b.savedAmount > a.savedAmount ? 1 : -1))
       .slice(0, 5);
+
     await ditributeCroakReward(results);
     return results;
   } catch (error) {
@@ -133,17 +143,19 @@ export const ditributeCroakReward = async (winners: DailyWinner[]) => {
     const address = winner.address;
     transfers.push({ amount, address });
   }
-  /// 1. TODO: Implement your batched transfer logic here (e.g., using viem's multicall or a distributor contract)
+
+  /// 1. TODO: Implement your batched transfer logic here
   console.log(`🚀 Distributing rewards to ${transfers.length} winners...`);
 
   // 2. Clear the daily rewards tracking file
   try {
-    const file = Bun.file(REWARDS_PATH);
-    if (await file.exists()) {
-      await unlink(REWARDS_PATH);
-      console.log("✅ Rewards tracking file reset for the next day.");
+    // In Node.js, we just try to unlink it. If it doesn't exist, it throws ENOENT.
+    await fs.unlink(REWARDS_PATH);
+    console.log("✅ Rewards tracking file reset for the next day.");
+  } catch (error: any) {
+    // We only log an error if it failed for a reason OTHER than "file not found"
+    if (error.code !== "ENOENT") {
+      console.error("❌ Failed to delete rewards.json:", error);
     }
-  } catch (error) {
-    console.error("❌ Failed to delete rewards.json:", error);
   }
-};;
+};

@@ -1,5 +1,5 @@
-import { runDailyLeaderboard } from "./tokens/croak";
-import { divider, formatAmount } from "./personalisation";
+import { runDailyLeaderboard } from "./tokens/croak.js";
+import { divider, formatAmount } from "./personalisation.js";
 /**
  * Formats the daily announcement message
  */
@@ -35,5 +35,4 @@ const dailyCroakWinnerMessage = async () => {
   }
 };
 
-
-export {dailyCroakWinnerMessage}
+export { dailyCroakWinnerMessage };

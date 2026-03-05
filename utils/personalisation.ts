@@ -1,4 +1,8 @@
-import { getReward, getEligibleAddresses, getLiveReward } from "./tokens/croak";
+import {
+  getReward,
+  getEligibleAddresses,
+  getLiveReward,
+} from "./tokens/croak.js";
 interface Personalization {
   header: string;
   body: string;
