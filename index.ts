@@ -54,7 +54,7 @@ bot.command("autohodl", async (ctx) => {
   const chatTitle = "title" in ctx.chat ? ctx.chat.title : "Private";
 
   if (!walletAddress) {
-    return ctx.reply("⚠️ Usage: <b>/calc &lt;wallet_address&gt;</b>", {
+    return ctx.reply("⚠️ Usage: <b>/autohodl &lt;wallet_address&gt;</b>", {
       parse_mode: "HTML",
     });
   }
@@ -130,16 +130,15 @@ bot.command("daily", async (ctx) => {
   });
 });
 
-// --- Express Server (Replacing Bun.serve) ---
+// --- Express Server ---
 const app = express();
-app.use(express.json()); // This replaces the need for await req.json()
+app.use(express.json()); 
 
-const port = process.env.TRIGGER_PORT || 3001;
+const port = process.env.PORT || process.env.TRIGGER_PORT || 3001;
 
 app.post("/notify", async (req, res) => {
   try {
-    // ToDo: Add authorisation
-    const { userAddress, amount, chainId } = req.body as SavingTrigger;
+    const { userAddress, amount, chainId } = req.body;
 
     const parsedAmount = Number(formatUnits(BigInt(amount), 6));
     const ui = await getSavingsMessage(userAddress, parsedAmount);
@@ -152,7 +151,6 @@ app.post("/notify", async (req, res) => {
       ]),
     });
 
-    // Node/Express way to send JSON response
     res.json({ status: "success", delivered: true });
   } catch (err) {
     console.error("Trigger Error:", err);
@@ -160,12 +158,35 @@ app.post("/notify", async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`🚀 Webhook Server listening on port ${port}`);
-});
+// --- Telegraf Webhook vs Polling Logic ---
+// Render automatically provides process.env.RENDER_EXTERNAL_URL
+const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || CLEAN_BASE_URL;
 
-console.log("🚀 Telegram Bot is running with Node.js");
-bot.launch();
+if (process.env.NODE_ENV === "production") {
+  // 1. Use Webhooks in Production (Render)
+  const webhookPath = `/telegraf-webhook`;
+  
+  // Attach Telegraf to your Express app
+  app.use(bot.webhookCallback(webhookPath));
+  
+  // Start Express
+  app.listen(port, async () => {
+    console.log(`🚀 Express Server listening on port ${port}`);
+    // Tell Telegram to send updates to your Express server
+    await bot.telegram.setWebhook(`${PUBLIC_URL}${webhookPath}`);
+    console.log(`🚀 Telegram Webhook set to ${PUBLIC_URL}${webhookPath}`);
+  });
 
+} else {
+  // 2. Use Long Polling in Development (Local)
+  app.listen(port, () => {
+    console.log(`🚀 Express Server listening on port ${port}`);
+  });
+
+  bot.launch();
+  console.log("🚀 Telegram Bot is running in Polling mode (Local)");
+}
+
+// Enable graceful stop
 process.on("SIGINT", () => bot.stop("SIGINT"));
 process.on("SIGTERM", () => bot.stop("SIGTERM"));
