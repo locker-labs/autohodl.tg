@@ -26,7 +26,7 @@ const getDailyTopSavers = async () => {
     let allLogs = [];
 
     // Pagination Loop
-    for (let i = startBlock; i < currentBlock; i += CHUNK_SIZE) {
+    for (let i = startBlock; i < currentBlock; ) {
       const fromBlock = i;
       const toBlock =
         i + CHUNK_SIZE > currentBlock ? currentBlock : i + CHUNK_SIZE;
@@ -38,6 +38,7 @@ const getDailyTopSavers = async () => {
         toBlock,
       });
       allLogs.push(...logs);
+      i = toBlock + 1n;
     }
 
     // Aggregate rewards by user
@@ -45,9 +46,10 @@ const getDailyTopSavers = async () => {
     for (const log of allLogs) {
       const { user, value } = log.args;
       if (!user || value === undefined) continue;
+      const userKey = user.toLowerCase();
 
       const current = totals.get(user) || 0n;
-      totals.set(user, current + value);
+      totals.set(userKey, current + value);
     }
 
     return Array.from(totals.entries())

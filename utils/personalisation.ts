@@ -72,7 +72,7 @@ export const getPastSavingsMessage = (
       header += `${divider}\n`;
       let croakBody = `User: ${shortAddress}\n`;
       croakBody += `In the last 30 days you could have saved:\n\n`;
-      croakBody += `🤑 Upto ${formatAmount(getReward(parseFloat(formattedUSDC), true))} $CROAK in bonuses \n`;
+      croakBody += `🤑 Up to ${formatAmount(getReward(parseFloat(formattedUSDC), true))} $CROAK in bonuses \n`;
       croakBody += `💵 ${formatAmount(Number(formattedUSDC))} USDC accrued savings \n`;
       croakBody += `📈 Earning yield on Aave\n`;
       let footer = `${divider}\n\n`;
@@ -115,7 +115,7 @@ export const getSavingsMessage = async (
   } else {
     const reward = await getLiveReward(userAddress, amount);
     if (reward > 0) {
-      body += `🐸 Earned $${formatAmount(reward)} $CROAK bonus\n`;
+      body += `🐸 Earned ${formatAmount(reward)} $CROAK bonus\n`;
     } else {
       body += `🐸 Daily limit reached for $CROAK bonus \n`;
     }

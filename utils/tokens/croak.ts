@@ -106,29 +106,39 @@ export const runDailyLeaderboard = async (): Promise<DailyWinner[]> => {
       return [];
     }
 
-    // 2. Extract addresses for the balance check (Added explicit 'any' type to clear TS error)
+    // 2. Extract addresses for the balance check
     const participantAddresses = rawSavingsData.map(
       (s: any) => s.address as `0x${string}`,
     );
 
-    // 3. Filter for $CROAK holders
+    // 3. Get $CROAK holders to determine eligibility
     const eligibleAddresses = await getEligibleAddresses(participantAddresses);
     const eligibleSet = new Set(eligibleAddresses);
 
-    // 4. Filter the raw data using our eligible set (Added explicit types to clear TS error)
+    // 4. Map data with the isEligible flag, sort, and grab top 5
     const results = rawSavingsData
-      .filter((item: any) => eligibleSet.has(item.address as `0x${string}`))
-      .map((item: any) => ({
-        address: item.address,
-        savedAmount: item.rawAmount, // The raw BigInt
-        formattedAmount: item.formattedAmount, // The human-readable float
-        rewardAmount: getReward(item.formattedAmount), // Your constant reward
-      }))
+      .map((item: any) => {
+        const isEligible = eligibleSet.has(item.address as `0x${string}`);
+        return {
+          address: item.address,
+          savedAmount: item.rawAmount, // The raw BigInt
+          formattedAmount: item.formattedAmount, // The human-readable float
+          rewardAmount: isEligible ? getReward(item.formattedAmount) : 0, // Only reward if eligible
+        };
+      })
       // Sort by the BigInt to ensure accuracy
-      .sort((a: any, b: any) => (b.savedAmount > a.savedAmount ? 1 : -1))
+      .sort((a: any, b: any) =>
+        b.savedAmount > a.savedAmount
+          ? 1
+          : b.savedAmount < a.savedAmount
+            ? -1
+            : 0,
+      )
       .slice(0, 5);
 
+    // Ensure this function knows to ignore (or differently handle) ineligible users in the array
     await ditributeCroakReward(results);
+
     return results;
   } catch (error) {
     console.error("Error running daily leaderboard:", error);
